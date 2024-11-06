@@ -16,14 +16,14 @@ import warnings
 warnings.filterwarnings("error")
 
 # Configura o gerador de números aleatórios
-rng = np.random.default_rng(seed=42)
+rng = np.random.default_rng(seed=10)
 
 # Lê a série temporal
-Y = np.loadtxt("data/Y1.txt")
+Y = np.loadtxt("data/Y.txt")
 T = len(Y)
 
 # Diretório para salvar os resultados
-results_path = "results/Y1_5300_3/"
+results_path = "results/1000"
 
 #%% Condicionais completas
 
@@ -243,16 +243,10 @@ def amostra_mu(sigma, x0, alpha, Delta, Eta, Y, c, d):
 
 
 # Gera uma amostra de Delta (distribuição Bernoulli)
-def amostra_Delta(alpha, mu, Delta, Eta, P, Y, n_passos):
+def amostra_Delta(alpha, mu, Delta, Eta, P, Y):
     Prob_delta = np.array([post_delta_j(j, P, alpha, mu, Delta, Eta, Y) for j in range(1,T-1)])
     
-    if n_passos > 1:
-        p_ = np.tile(Prob_delta, (n_passos, 1))
-        amostra = bernoulli.rvs(p=p_, random_state=rng)
-        Delta_pos = np.percentile(amostra, q=50, method='closest_observation') # calcula o valor da moda 
-        
-    else:
-        Delta_pos = bernoulli.rvs(p=Prob_delta, random_state=rng)
+    Delta_pos = bernoulli.rvs(p=Prob_delta, random_state=rng)
     
     Delta_pos = np.insert(Delta_pos, 0, 0)
     Delta_pos = np.append(Delta_pos, 0)
@@ -262,56 +256,41 @@ def amostra_Delta(alpha, mu, Delta, Eta, P, Y, n_passos):
 
 
 # Gera uma amostra de eta_j|delta_j=1 pelo método de Metropolis Discreto
-def amostra_eta_j(j, x0, Eta, Delta, P, Beta, Y, Q, n_passos):
+def amostra_eta_j(j, x0, Eta, Delta, P, Beta, Y, Q):
     
     ns,_ = Q.shape
     x = x0
-    X = []
-    na = 0 # número de aceitos
+    aceito = 0
     
-    for _ in range(n_passos):
-        
-        # define um valor proposto
-        x_prop = rng.choice(ns, p=Q[x])
-        
-        # calcula a probabilidade de aceitação
-        num = logpost_eta_j(j, x_prop, mu, Eta, Delta, P, Beta, Y)
-        den = logpost_eta_j(j, x, mu, Eta, Delta, P, Beta, Y)
-        if num < den:
-            prob_aceit = min([1, exp(num-den)])
-        else:
-            prob_aceit = 1
-        
-        # aceita ou rejeita x_prop
-        u = rng.uniform()
-        if u < prob_aceit:
-            x = x_prop
-            na = na + 1 
-        X.append(x)
+    # define um valor proposto
+    x_prop = rng.choice(ns, p=Q[x])
     
-    # caso simulação em bloco, retorna o valor mediano da amostra
-    # Observe que a função np.median retorna o valor médio em caso de vetor com dimensão par
-    # necessário então usar o percentil com método de interpolação=valor mais próximo
-    if n_passos > 1:
-        y = np.percentile(X, q=50, method='closest_observation', axis=0)
+    # calcula a probabilidade de aceitação
+    num = logpost_eta_j(j, x_prop, mu, Eta, Delta, P, Beta, Y)
+    den = logpost_eta_j(j, x, mu, Eta, Delta, P, Beta, Y)
+    if num < den:
+        prob_aceit = min([1, exp(num-den)])
     else:
-        y = x
+        prob_aceit = 1
     
-    # taxa de aceitação
-    taxa_aceit = na/n_passos
-    
-    return y, taxa_aceit
+    # aceita ou rejeita x_prop
+    u = rng.uniform()
+    if u < prob_aceit:
+        x = x_prop
+        aceito = 1
+
+    return x, aceito
 
 
 # Gera uma amostra de eta (somente para delta_j=1)
-def amostra_Eta(x0, Delta, P, Beta, Y, Q, n_passos):
+def amostra_Eta(x0, Delta, P, Beta, Y, Q):
     J1 = np.argwhere(Delta).reshape(-1) # índices j nos quais delta_j= 1
     nJ1 = len(J1)
     Eta_ = x0.copy()
     taxa_aceit = 0
     for j in J1:
         if j > 0 and j< T-2:
-           eta_j, taxa_aceit_j = amostra_eta_j(j, x0[j], x0, Delta, P, Beta, Y, Q, n_passos)
+           eta_j, taxa_aceit_j = amostra_eta_j(j, x0[j], Eta_, Delta, P, Beta, Y, Q)
            Eta_[j] = eta_j
            taxa_aceit = (nJ1-1)*(taxa_aceit)/nJ1 + taxa_aceit_j/nJ1
     return Eta_, taxa_aceit
@@ -370,7 +349,7 @@ def amostra_Beta(sigma, x0, Eta, l, m):
 
 
 #%% Parâmetros da simulação
-N = 5300  # número de passos
+N = 1000 # número de passos
 
 # Hiperparâmetros das distribuições a priori
 a = b = 0.01
@@ -381,26 +360,24 @@ l = 10
 m = 1
 
 # Parâmetros do modelo (inicialização)
-alpha = 0.9
-mu = 10
-Delta_n = np.ones(T, dtype='int32')
+alpha = 0.5
+mu = 0.5
+Delta_n = np.zeros(T, dtype='int32')
 Eta_n = np.ones(T, dtype='int32')
-P_n = np.ones(T)*0.1
-Beta_n = np.ones(T)*10
+P_n = np.ones(T)*0.01
+Beta_n = np.ones(T)
 
 # Parâmetros dos métodos MCMC
-sigma_alpha = 0.05  # desvio-padrão do passeio aleatório de alpha
-sigma_mu = 0.5      # desvio-padrão do passeio aleatório de mu
-sigma_beta = 1      # desvio-padrão do passeio aleatório de beta_t
-n_passos_delta = 1  # núm. de passos para amostrar delta_j (simulação em bloco)
-n_passos_eta = 1    # núm. de passos para amostrar eta_j (simulação em bloco)
+sigma_alpha = 0.07  # desvio-padrão do passeio aleatório de alpha
+sigma_mu = 1.7      # desvio-padrão do passeio aleatório de mu
+sigma_beta = 6      # desvio-padrão do passeio aleatório de beta_t
 
 # matriz de transição Q (simétrica) para simulação de eta_j
-ns = 20     # número de estados
-p1 = 0.5    # probabilidade sj = si
-Q = np.ones((ns,ns))*(1-p1)/(ns-1) 
+ns = 15     # número de estados
+p1 = 0.3   # probabilidade sj = si
+Q = np.ones((ns,ns))*(1-p1)/(ns-1)
 np.fill_diagonal(Q, p1)
-
+#%%
 # Variáveis auxiliares para cálculo da taxa de aceitação
 aceit_alpha = 0
 aceit_mu = 0
@@ -416,6 +393,37 @@ P = [P_n]
 Beta = [Beta_n]
 Prob_delta = [np.zeros(T)]
 
+# Salva os hiperparâmetros utilizados na simulação
+dict_hyperparams = {
+    'a': a,
+    'b': b,
+    'c': c,
+    'd': d,
+    'g': g,
+    'h': h,
+    'l': l,
+    'm': m}
+
+with open(results_path+'hiperparametros.txt', 'w') as f:
+    print(dict_hyperparams, file=f)
+
+# Salva os parâmetros utilizados na simulação
+dict_params = {
+    'alpha': alpha,
+    'mu': mu,
+    'Delta_n': Delta_n[0],
+    'Eta_n': Eta_n[0],
+    'P_n': P_n[0],
+    'Beta_n': Beta_n[0],
+    'sigma_alpha': sigma_alpha,
+    'sigma_mu': sigma_mu,
+    'sigma_beta': sigma_beta,
+    'ns': ns,
+    'p1': p1}
+
+with open(results_path+'parametros.txt', 'w') as f:
+    print(dict_params, file=f)
+
 #%% Algoritmo principal - Gibbs Sampling com passos de Metroplis
 startTime = time()
 for n in range(1,N):
@@ -424,35 +432,35 @@ for n in range(1,N):
         print(f"Passo {n}/{N}: aceitações: alpha={aceit_alpha:.2f}, "
               f"mu={aceit_mu:.2f}, eta={aceit_Eta:.2f}, " 
               f"beta={aceit_Beta:.2f}")
+    # gera uma amostra de P_n (Distribuição Beta)
+    P_n = amostra_P(Delta_n, g, h)
+    P.append(P_n)
+    
     # gera uma amostra de alpha (Metrpolis contínuo)
     alpha, aceit_alpha_n = amostra_alpha(sigma_alpha, alpha, mu, Delta_n, Eta_n, Y, a, b)
     aceit_alpha = (n-1)*(aceit_alpha)/n + aceit_alpha_n/n
     Alpha.append(alpha)
-
+    
     # gera uma amostra de mu (Metropolis contínuo)
     mu, aceit_mu_n = amostra_mu(sigma_mu, mu, alpha, Delta_n, Eta_n, Y, c, d)
     aceit_mu = (n-1)*(aceit_mu)/n + aceit_mu_n/n
     Mu.append(mu)
-    
+        
     # gera uma amostra de Delta_n (distribuição Bernoulli)
-    Delta_n, Prob_delta_n = amostra_Delta(alpha, mu, Delta_n, Eta_n, P_n, Y, n_passos_delta)
+    Delta_n, Prob_delta_n = amostra_Delta(alpha, mu, Delta_n, Eta_n, P_n, Y)
     Delta.append(Delta_n)
-    Prob_delta.append(Prob_delta_n)
+    Prob_delta.append(Prob_delta_n) 
     
     # gera uma amostra de Eta_n (Metropolis discreto - sim. em bloco)
-    Eta_n, aceit_eta_n = amostra_Eta(Eta_n, Delta_n, P_n, Beta_n, Y, Q, n_passos_eta)
+    Eta_n, aceit_eta_n = amostra_Eta(Eta_n, Delta_n, P_n, Beta_n, Y, Q)
     aceit_Eta = (n-1)*(aceit_Eta)/n + aceit_eta_n/n  # atualiza a taxa de aceitação média
     Eta.append(Eta_n)
-    
-    # gera uma amostra de P_n (Distribuição Beta)
-    P_n = amostra_P(Delta_n, g, h)
-    P.append(P_n)
     
     # gera uma amostra de Beta_n (Metropolis contínuo)
     Beta_n, aceit_beta_n = amostra_Beta(sigma_beta, Beta_n, Eta_n, l, m)
     aceit_Beta = (n-1)*(aceit_Beta)/n + aceit_beta_n/n  # atualiza a taxa de aceitação média
     Beta.append(Beta_n)
-
+    
 endTime = time()
 elapsedTime = endTime-startTime
 print(f'\nTempo gasto: {elapsedTime:.2f}s')
@@ -472,6 +480,13 @@ print(f"Alpha: {aceit_alpha:.2f}")
 print(f"Mu: {aceit_mu:.2f}")
 print(f"Eta: {aceit_Eta:.2f}")
 print(f"Beta: {aceit_Beta:.2f}")
+
+with open(results_path+'taxas_aceitacao.txt', 'w') as f:
+    print("\nTaxas de aceitações:", file=f)
+    print(f"Alpha: {aceit_alpha:.2f}", file=f)
+    print(f"Mu: {aceit_mu:.2f}", file=f)
+    print(f"Eta: {aceit_Eta:.2f}", file=f)
+    print(f"Beta: {aceit_Beta:.2f}", file=f)
 
 #%% Salva os vetores simulados
 np.savetxt(results_path + "Alpha.txt", Alpha)

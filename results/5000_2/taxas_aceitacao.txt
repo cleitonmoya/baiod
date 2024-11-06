@@ -1,0 +1,6 @@
+
+Taxas de aceitações:
+Alpha: 0.35
+Mu: 0.45
+Eta: 0.26
+Beta: 0.33

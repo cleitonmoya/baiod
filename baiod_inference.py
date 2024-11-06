@@ -7,19 +7,23 @@ Created on Thu Oct 31 20:45:15 2024
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import arviz as az
+import warnings
 
+# Considera warning (ex., underflow) como erro
+warnings.filterwarnings("default")
 
 plt.rcParams.update({'font.size': 8, 'axes.titlesize': 8})
 plt.close('all')
 
 # Lê a série temporal
-Y = np.loadtxt("data/Y1.txt")
+Y = np.loadtxt("data/Y.txt")
 T = len(Y)
-results_path = "results/Y1_5300_1/"
+results_path = "results/5000_1/5000_1"
 
 # Parâmetros para descarte de amostras
-burnin = 300    # número de amostras para descartar
-salto = 20      # salto para redução de correlações
+burnin = 200    # número de amostras para descartar
+salto = 10      # salto para redução de correlações
 
 # Carrega os dados simulados
 Nomes = ["Alpha", "Mu", "Delta", "Prob_delta", "Eta", "P", "Beta"]
@@ -102,4 +106,12 @@ sns.kdeplot(Alpha[burnin:], bw_adjust=2, ax=ax[0])
 ax[1].set_xlabel(r"$\mu$")
 sns.kdeplot(Mu[burnin:], bw_adjust=2, ax=ax[1])
 
-
+#%% Densidades com intervalo de credibilidade
+fig,ax = plt.subplots(ncols=2, layout='constrained',figsize=(5,3))
+az.plot_posterior(Alpha, ax=ax[0], textsize=8, hdi_prob=0.95)
+az.plot_posterior(Mu, ax=ax[1], textsize=8, hdi_prob=0.95)
+ax[0].set_xlabel(r'$\alpha$', fontsize=8)
+ax[0].set_title('')
+ax[1].set_xlabel(r'$\mu$', fontsize=8)
+ax[1].set_title('')
+#ax[0].set_xlim(0.7,0.95)

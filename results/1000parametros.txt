@@ -1,0 +1,1 @@
+{'alpha': 0.5, 'mu': 0.5, 'Delta_n': 0, 'Eta_n': 1, 'P_n': 0.01, 'Beta_n': 1.0, 'sigma_alpha': 0.07, 'sigma_mu': 1.7, 'sigma_beta': 6, 'ns': 15, 'p1': 0.3}
